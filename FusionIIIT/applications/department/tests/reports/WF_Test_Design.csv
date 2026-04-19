@@ -1,0 +1,3 @@
+WF_ID,Title,Category,Scenario,Expected Final State
+WF-1,Stock Request Workflow,End-to-End,"User creates request, authorized reviewer approves, authorized issuer issues stock",Stock status=ISSUED with issued_quantity set
+WF-1,Stock Request Workflow,Negative,Issue attempted before approval,Request not issued; validation/authorization error returned

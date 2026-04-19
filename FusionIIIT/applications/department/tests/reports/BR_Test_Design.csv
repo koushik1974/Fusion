@@ -1,0 +1,29 @@
+BR_ID,Title,Category,Input/Action,Expected Result
+BR-1,Announcement requires all fields,Valid,POST announcement with all fields,Announcement created
+BR-1,Announcement requires all fields,Invalid,POST announcement without message,Error returned
+BR-2,Only authorized users can delete announcements,Valid,DELETE announcement by authorized user,Announcement deleted
+BR-2,Only authorized users can delete announcements,Invalid,DELETE announcement by unauthorized user,403 forbidden
+BR-3,Feedback must have subject and description,Valid,POST feedback with subject and description,Feedback created
+BR-3,Feedback must have subject and description,Invalid,POST feedback without subject,Error returned
+BR-4,Only students can submit feedback,Valid,Student submits feedback,Feedback accepted
+BR-4,Only students can submit feedback,Invalid,Faculty submits feedback,403 forbidden
+BR-5,Stock request requires mandatory fields,Valid,POST stock request with all fields,Request created
+BR-5,Stock request requires mandatory fields,Invalid,POST stock request missing fields,Error returned
+BR-6,Stock quantity must be positive,Valid,POST stock request with quantity=1,Accepted
+BR-6,Stock quantity must be positive,Invalid,POST stock request with quantity=0,Rejected
+BR-7,Stock decision must be valid,Valid,POST decision=APPROVED,Accepted
+BR-7,Stock decision must be valid,Invalid,POST decision=INVALID,Error returned
+BR-8,Stock can only be issued after approval,Valid,POST issue after approval with valid issued_quantity,Stock issued or allocated
+BR-8,Stock can only be issued after approval,Invalid,POST issue before approval,Rejected
+BR-9,Timetable requires all fields,Valid,POST timetable with all fields,Entry created
+BR-9,Timetable requires all fields,Invalid,POST timetable missing fields,Error returned
+BR-10,Facility requires name and valid amount,Valid,"POST facility with name, branch, location, lab and amount=1",Facility created
+BR-10,Facility requires name and valid amount,Invalid,POST facility with amount=0,400 validation error
+BR-11,Directory APIs are read-only,Valid,GET student/faculty directory,Directory data returned
+BR-11,Directory APIs are read-only,Invalid,POST student directory endpoint,405 method not allowed
+BR-12,Profile change request payload must be valid,Valid,"POST profile change request with valid target_type, target_id and changes",Request submitted
+BR-12,Profile change request payload must be valid,Invalid,POST profile change request with invalid target_type,400 validation error
+BR-13,Only authorized users can resolve feedback,Valid,POST resolve feedback by authorized user,Feedback resolved
+BR-13,Only authorized users can resolve feedback,Invalid,POST resolve feedback by unauthorized user,403 forbidden
+BR-14,System notifications must reach relevant recipients,Valid,Trigger stock request or announcement event,Notification delivered to relevant recipients
+BR-14,System notifications must reach relevant recipients,Invalid,Notification delivery fails,Delivery failure logged for retry

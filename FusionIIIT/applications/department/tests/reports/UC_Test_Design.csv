@@ -1,0 +1,40 @@
+UC_ID,Title,Category,Scenario,Preconditions,Input/Action,Expected Result
+UC-1,View Announcements,Happy Path,User fetches all announcements,User is authenticated,GET /ann_data_api/ALL,List of announcements returned
+UC-1,View Announcements,Alternate Path,User filters announcements by department,User is authenticated,GET /ann_data_api/CSE,Filtered announcements returned
+UC-1,View Announcements,Exception,No announcements available,User is authenticated,GET /ann_data_api/ALL,Empty list returned
+UC-2,Create Announcement,Happy Path,Valid announcement creation,User is authenticated,POST /announcements_api with valid data,Announcement created successfully
+UC-2,Create Announcement,Alternate Path,Department normalization (NS),User is authenticated,POST with department=Natural Science,Saved as NS
+UC-2,Create Announcement,Exception,Missing required fields,User is authenticated,POST without message,Error response returned
+UC-3,Delete Announcement,Happy Path,Valid deletion,User authorized,DELETE /delete_announcement_api/<id>,Announcement deleted
+UC-3,Delete Announcement,Alternate Path,Delete invalid id,User authorized,DELETE invalid id,Not found error
+UC-3,Delete Announcement,Exception,Unauthorized delete attempt,User not authorized,DELETE request,403 forbidden
+UC-4,Submit Feedback,Happy Path,Valid feedback submission,User is authenticated,POST /feedback_api with valid data,Feedback created
+UC-4,Submit Feedback,Alternate Path,Auto category assignment,User has department,POST without category,Category auto-filled
+UC-4,Submit Feedback,Exception,Missing subject or description,User is authenticated,POST missing fields,Error returned
+UC-5,Resolve Feedback,Happy Path,Valid resolution,User authorized,POST /resolve_feedback_api/<id>,Feedback resolved
+UC-5,Resolve Feedback,Alternate Path,Resolve already resolved feedback,User authorized,POST again,State remains resolved
+UC-5,Resolve Feedback,Exception,Unauthorized resolution,User not authorized,POST request,403 forbidden
+UC-6,Create Stock Request,Happy Path,Valid stock request,User authenticated,POST /stock_requests_api,Request created
+UC-6,Create Stock Request,Alternate Path,Default receiver assignment,User authenticated,POST without receiver,Department used as receiver
+UC-6,Create Stock Request,Exception,Invalid quantity,User authenticated,POST quantity=0,Error returned
+UC-7,Approve or Reject Stock,Happy Path,Approve request,User authorized,POST /stock_decision_api decision=APPROVED,Status updated
+UC-7,Approve or Reject Stock,Alternate Path,Reject request,User authorized,POST decision=REJECTED,Status updated
+UC-7,Approve or Reject Stock,Exception,Invalid decision value,User authorized,POST decision=INVALID,Error returned
+UC-8,Issue Stock,Happy Path,Valid issue,Request approved,POST /stock_issue_api,Stock issued
+UC-8,Issue Stock,Alternate Path,Allocate instead of issue,Request approved,POST action=ALLOCATE,Stock allocated
+UC-8,Issue Stock,Exception,Issue before approval,Request not approved,POST request,Error returned
+UC-9,Manage Timetable,Happy Path,Create timetable entry,User authorized,POST /timetable_api,Entry created
+UC-9,Manage Timetable,Alternate Path,Fetch timetable,User authorized,GET /timetable_api,List returned
+UC-9,Manage Timetable,Exception,Missing required fields,User authorized,POST incomplete data,Error returned
+UC-10,Manage Facilities,Happy Path,Create facility entry with valid amount,User authenticated,"POST /facilities_api with name, branch, lab, location and amount=1",Facility row created with amount saved
+UC-10,Manage Facilities,Alternate Path,Fetch facilities filtered by branch,User authenticated,GET /facilities_api?branch=CSE,Filtered facilities returned
+UC-10,Manage Facilities,Exception,Invalid facility amount,User authenticated,POST /facilities_api amount=0,400 returned with amount validation error
+UC-11,Browse Department Directories,Happy Path,Fetch student directory by branch,User authenticated,GET /student_directory_api/CSE,200 returned with directory rows
+UC-11,Browse Department Directories,Alternate Path,Fetch faculty directory with branch alias,User authenticated,GET /faculty_directory_api/NS,200 returned; NS branch alias normalized
+UC-11,Browse Department Directories,Exception,Invalid method on directory endpoint,User authenticated,POST /student_directory_api/CSE,405 method not allowed
+UC-12,Submit Profile Change Request,Happy Path,Submit valid profile change request,"User authenticated with valid target_type, target_id and non-empty changes","POST /profile_change_requests_api target_type=student, target_id=<roll_no>, changes={...}",201 returned and request id generated
+UC-12,Submit Profile Change Request,Alternate Path,Fetch own profile change requests,User authenticated,GET /profile_change_requests_api,200 returned with requester-visible requests
+UC-12,Submit Profile Change Request,Exception,Invalid target type in request,User authenticated,POST /profile_change_requests_api target_type=invalid,400 returned with target_type validation error
+UC-13,Send System Notifications,Happy Path,Send notification on stock request creation,Stock request event triggered,System detects event and sends notification to relevant recipients,Real-time notification and/or email sent to target recipients
+UC-13,Send System Notifications,Alternate Path,Send notification on stock approval,Stock approval event triggered,System sends notification based on role and context,Notification delivered to appropriate users
+UC-13,Send System Notifications,Exception,Notification delivery fails,"Event occurred, delivery attempt made",System attempts to send notification,Delivery failure logged for retry

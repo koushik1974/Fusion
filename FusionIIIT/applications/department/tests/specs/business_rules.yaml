@@ -1,0 +1,182 @@
+business_rules:
+
+  - id: "BR-1"
+    title: "Announcement requires all fields"
+    description: "programme, batch, department and message must be provided"
+
+    valid_tests:
+      - input_action: "POST announcement with all fields"
+        expected_result: "Announcement created"
+
+    invalid_tests:
+      - input_action: "POST announcement without message"
+        expected_result: "Error returned"
+
+
+  - id: "BR-2"
+    title: "Only authorized users can delete announcements"
+    description: "Only HOD/Admin can delete announcements"
+
+    valid_tests:
+      - input_action: "DELETE announcement by authorized user"
+        expected_result: "Announcement deleted"
+
+    invalid_tests:
+      - input_action: "DELETE announcement by unauthorized user"
+        expected_result: "403 forbidden"
+
+
+  - id: "BR-3"
+    title: "Feedback must have subject and description"
+    description: "Feedback cannot be empty"
+
+    valid_tests:
+      - input_action: "POST feedback with subject and description"
+        expected_result: "Feedback created"
+
+    invalid_tests:
+      - input_action: "POST feedback without subject"
+        expected_result: "Error returned"
+
+
+  - id: "BR-4"
+    title: "Only students can submit feedback"
+    description: "Feedback submission restricted to students"
+
+    valid_tests:
+      - input_action: "Student submits feedback"
+        expected_result: "Feedback accepted"
+
+    invalid_tests:
+      - input_action: "Faculty submits feedback"
+        expected_result: "403 forbidden"
+
+
+  - id: "BR-5"
+    title: "Stock request requires mandatory fields"
+    description: "brief, request_details, request_receiver, lab, stock_item_name and quantity are required"
+
+    valid_tests:
+      - input_action: "POST stock request with all fields"
+        expected_result: "Request created"
+
+    invalid_tests:
+      - input_action: "POST stock request missing fields"
+        expected_result: "Error returned"
+
+
+  - id: "BR-6"
+    title: "Stock quantity must be positive"
+    description: "Quantity must be greater than zero"
+
+    valid_tests:
+      - input_action: "POST stock request with quantity=1"
+        expected_result: "Accepted"
+
+    invalid_tests:
+      - input_action: "POST stock request with quantity=0"
+        expected_result: "Rejected"
+
+
+  - id: "BR-7"
+    title: "Stock decision must be valid"
+    description: "Decision must be APPROVED or REJECTED"
+
+    valid_tests:
+      - input_action: "POST decision=APPROVED"
+        expected_result: "Accepted"
+
+    invalid_tests:
+      - input_action: "POST decision=INVALID"
+        expected_result: "Error returned"
+
+
+  - id: "BR-8"
+    title: "Stock can only be issued after approval"
+    description: "Only approved requests can be allocated or issued"
+
+    valid_tests:
+      - input_action: "POST issue after approval with valid issued_quantity"
+        expected_result: "Stock issued or allocated"
+
+    invalid_tests:
+      - input_action: "POST issue before approval"
+        expected_result: "Rejected"
+
+
+  - id: "BR-9"
+    title: "Timetable requires all fields"
+    description: "Only department staff can manage timetable and all fields are required"
+
+    valid_tests:
+      - input_action: "POST timetable with all fields"
+        expected_result: "Entry created"
+
+    invalid_tests:
+      - input_action: "POST timetable missing fields"
+        expected_result: "Error returned"
+
+
+  - id: "BR-10"
+    title: "Facility requires name and valid amount"
+    description: "Facility creation requires name, branch, location, lab and amount > 0"
+
+    valid_tests:
+      - input_action: "POST facility with name, branch, location, lab and amount=1"
+        expected_result: "Facility created"
+
+    invalid_tests:
+      - input_action: "POST facility with amount=0"
+        expected_result: "400 validation error"
+
+
+  - id: "BR-11"
+    title: "Directory APIs are read-only"
+    description: "Directory endpoints only allow GET requests"
+
+    valid_tests:
+      - input_action: "GET student/faculty directory"
+        expected_result: "Directory data returned"
+
+    invalid_tests:
+      - input_action: "POST student directory endpoint"
+        expected_result: "405 method not allowed"
+
+
+  - id: "BR-12"
+    title: "Profile change request payload must be valid"
+    description: "target_type must be student/faculty and changes must be non-empty"
+
+    valid_tests:
+      - input_action: "POST profile change request with valid target_type, target_id and changes"
+        expected_result: "Request submitted"
+
+    invalid_tests:
+      - input_action: "POST profile change request with invalid target_type"
+        expected_result: "400 validation error"
+
+
+  - id: "BR-13"
+    title: "Only authorized users can resolve feedback"
+    description: "Only admin/HOD users can resolve feedback items"
+
+    valid_tests:
+      - input_action: "POST resolve feedback by authorized user"
+        expected_result: "Feedback resolved"
+
+    invalid_tests:
+      - input_action: "POST resolve feedback by unauthorized user"
+        expected_result: "403 forbidden"
+
+
+  - id: "BR-14"
+    title: "System notifications must reach relevant recipients"
+    description: "Relevant users must be notified when department events occur"
+
+    valid_tests:
+      - input_action: "Trigger stock request or announcement event"
+        expected_result: "Notification delivered to relevant recipients"
+
+    invalid_tests:
+      - input_action: "Notification delivery fails"
+        expected_result: "Delivery failure logged for retry"

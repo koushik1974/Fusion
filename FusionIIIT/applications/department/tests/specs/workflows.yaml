@@ -1,0 +1,13 @@
+workflows:
+
+  - id: "WF-1"
+    title: "Stock Request Workflow"
+    description: "Assistant Professor requests stock -> HOD approves/rejects -> Dept Admin allocates/issues"
+
+    e2e_tests:
+      - scenario: "User creates request, authorized reviewer approves, authorized issuer issues stock"
+        expected_final_state: "Stock status=ISSUED with issued_quantity set"
+
+    negative_tests:
+      - scenario: "Issue attempted before approval"
+        expected_final_state: "Request not issued; validation/authorization error returned"

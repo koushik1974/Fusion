@@ -1,0 +1,356 @@
+================================================================================
+DEPARTMENT MODULE - QUICK REFERENCE GUIDE
+================================================================================
+Last Updated: April 18, 2026
+Module: Department (Stock, Announcements, Feedback, Timetable, Facilities, Directories)
+
+================================================================================
+1. COMPONENT LIST
+================================================================================
+
+MODEL COMPONENTS:
+- Announcements (ann_date, message, batch, programme, department, upload)
+- DepartmentStock (status: PENDING/APPROVED/REJECTED/ISSUED, quantity, issued_by)
+- DepartmentFeedback (subject, description, category, status: NEW/RESOLVED)
+- DepartmentTimetable (department, batch, day, time, subject, faculty, room)
+- Facility (name, branch, location, lab, amount, picture)
+- SpecialRequest (brief, request_details, upload, status)
+
+================================================================================
+2. BACKEND URLs (Django REST API)
+================================================================================
+
+ANNOUNCEMENTS:
+/api/announcements/                          - POST: Create announcement
+/api/ann-data/<branch>/                      - GET: Fetch announcements by branch
+/api/announcements/<announcement_id>/        - DELETE: Remove announcement
+
+STOCK MANAGEMENT:
+/api/stock/requests/                         - GET/POST: Stock requests list/create
+/api/stock/requests/<stock_id>/decision/     - POST: Approve/Reject stock
+/api/stock/requests/<stock_id>/issue/        - POST: Issue stock after approval
+
+FEEDBACK:
+/api/feedback/                               - GET/POST: Feedback list/submit
+/api/feedback/<feedback_id>/resolve/         - POST: Resolve feedback
+
+TIMETABLE:
+/api/timetable/                              - GET/POST: Timetable list/create
+/api/timetable/<timetable_id>/               - GET/PUT: Fetch/update timetable entry
+
+FACILITIES:
+/api/facilities/                             - GET/POST: Facilities list/create
+/api/facilities/delete/                      - POST: Delete facilities
+/api/labs/                                   - GET: All labs
+
+DIRECTORY:
+/api/faculty-directory/<branch>/             - GET: Faculty directory
+/api/student-directory/<branch>/             - GET: Student directory
+/api/alumni-directory/<branch>/              - GET: Alumni directory
+
+PROFILE:
+/api/student-profile/<roll_no>/              - GET: Student profile
+/api/faculty-profile/<username>/             - GET: Faculty profile
+/api/profile-change-requests/                - GET/POST: Profile changes list/submit
+/api/profile-change-requests/<request_id>/decision/ - POST: Approve/reject profile change
+
+================================================================================
+3. FRONTEND URLS & ROUTES
+================================================================================
+
+MAIN DASHBOARD:
+/department/                                 - DepartmentDashboard (Landing page)
+
+COMPONENT ROUTES:
+/department/announcements/                   - View/Create/Delete Announcements
+/department/feedback/                        - View/Submit Feedback
+/department/feedback/resolve/                - Resolve Feedback (Admin/HOD)
+/department/stock/                           - View Stock Requests
+/department/stock/request/                   - Request Stock (Assistant Professor)
+/department/stock/approve/                   - Approve/Reject Stock (HOD)
+/department/stock/issue/                     - Issue Stock (Dept Admin)
+/department/timetable/                       - View Timetable
+/department/timetable/create/                - Create Timetable Entry
+/department/facilities/                      - View Facilities
+/department/facilities/create/               - Create Facility
+/department/facilities/edit/                 - Edit Facility
+/department/directory/faculty/               - Faculty Directory
+/department/directory/student/               - Student Directory
+/department/profile/edit/                    - Edit Profile (Department)
+/department/profile-change/                  - Submit Profile Change Request
+
+================================================================================
+4. FEATURE LIST
+================================================================================
+
+ANNOUNCEMENTS:
+✓ Create department/batch-specific announcements
+✓ View announcements by branch/department
+✓ Filter announcements (All, by Department, by Batch)
+✓ Delete announcements (DeptAdmin/HOD only)
+✓ NS (Natural Science) department normalization
+✓ File upload support for announcements
+
+FEEDBACK SYSTEM:
+✓ Submit feedback (Students only)
+✓ Auto-category assignment
+✓ View feedback submissions
+✓ Resolve feedback (DeptAdmin/HOD only)
+✓ Add resolution remarks
+✓ Track feedback status (NEW/RESOLVED)
+
+STOCK MANAGEMENT:
+✓ Request stock (Assistant Professors only)
+✓ Approve/Reject requests (HOD only)
+✓ Issue stock after approval (DeptAdmin only)
+✓ Track request status (PENDING/APPROVED/REJECTED/ISSUED)
+✓ File upload for stock requests
+✓ Sync issued stock to Facility table
+✓ Assign issued quantity and date
+
+TIMETABLE:
+✓ Create timetable entries
+✓ View timetable by department/batch
+✓ All required fields enforced
+✓ Update timetable entries
+✓ Filter by day/time
+
+FACILITIES:
+✓ Create facility records
+✓ Upload facility images
+✓ Fetch facilities by branch/lab
+✓ Track facility amount
+✓ Delete multiple facilities
+✓ Filter facilities by department
+
+DIRECTORY:
+✓ Faculty directory by branch
+✓ Student directory by branch
+✓ Alumni directory tracking
+✓ Branch alias normalization (DS→Design, NS→Natural Science, LA→Liberal Arts)
+✓ Read-only endpoints (GET only)
+✓ Display contact, email, department info
+
+PROFILE MANAGEMENT:
+✓ Submit profile change requests (Students/Faculty)
+✓ Fetch profile change requests
+✓ Approve/Reject profile changes (Admin)
+✓ Payload validation (target_type: student/faculty)
+✓ Track change status
+
+AUTHORIZATION:
+✓ Assistant Professor - Request stock, View own requests
+✓ HOD - Approve/Reject stock, Delete announcements, Resolve feedback
+✓ Dept Admin - Issue/Allocate stock, Manage facilities
+✓ Students - Submit feedback, View announcements
+✓ All authenticated users - View directories
+
+================================================================================
+5. FRONTEND COMPONENTS & FILES
+================================================================================
+
+MAIN DASHBOARD:
+- DepartmentDashboard.jsx         - Main dashboard container
+- Landingpage.jsx                 - Landing page interface
+
+ANNOUNCEMENTS:
+- MakeAnnouncement.jsx            - Create/post announcement form
+- ViewAnouncements.jsx            - View announcements list
+
+FEEDBACK:
+- FeedbackForm.jsx                - Submit feedback form
+- ViewFeedback.jsx                - View feedback submissions
+- ResolveFeedback.jsx             - Resolve feedback (admin)
+
+STOCK:
+- Stock.jsx                       - Stock management main component
+- RequestStockItem.jsx            - Request stock form
+- StockViewList.jsx               - View all stock requests
+- SpecialTable.jsx                - Stock requests table display
+
+TIMETABLE:
+- TimetableCreate.jsx             - Create timetable entry
+- TimetableView.jsx               - View timetable
+
+FACILITIES:
+- Facilities.jsx                  - Facilities management
+- FacilityGallery.jsx             - Facility image gallery
+- FacilitiesDescriptive.jsx       - Facility descriptions
+- EditFacilities.jsx              - Edit facility details
+
+DIRECTORY:
+- Faculty.jsx                     - Faculty directory view
+- Studentcat.jsx                  - Student directory view
+- DepartmentResources.jsx         - Department resources/directories
+
+PROFILE:
+- ProfileDepartmentEditor.jsx     - Edit profile (department module)
+
+UTILITY:
+- DeptTabs.jsx                    - Tab navigation component
+
+================================================================================
+6. BACKEND API VIEW FUNCTIONS (api/views.py)
+================================================================================
+
+ANNOUNCEMENT FUNCTIONS:
+def announcements_api(request)
+def ann_data_api(request, branch)
+def delete_announcement_api(request, announcement_id)
+
+FACILITY FUNCTIONS:
+def facilities_api(request)
+def facilities_delete_api(request)
+def labs_api(request)
+def _serialize_facility(item)
+def _sync_facility_from_stock_request(stock_request)
+
+STOCK FUNCTIONS:
+def stock_requests_api(request)
+def stock_decision_api(request, stock_id)
+def stock_issue_api(request, stock_id)
+def _can_request_stock(user)
+def _can_approve_reject_stock(user)
+def _can_allocate_issue_stock(user)
+def _can_manage_department_stock(user)
+def _get_department_stock_queryset(user)
+def _serialize_department_stock(item)
+
+FEEDBACK FUNCTIONS:
+def feedback_api(request)
+def resolve_feedback_api(request, feedback_id)
+def _can_resolve_feedback(user)
+def _can_manage_department_feedback(user)
+
+TIMETABLE FUNCTIONS:
+def timetable_api(request)
+def timetable_detail_api(request, timetable_id)
+
+DIRECTORY FUNCTIONS:
+def faculty_directory_api(request, branch)
+def student_directory_api(request, branch)
+def alumni_directory_api(request, branch)
+def _normalize_branch_name(branch)
+def _serialize_directory_row(user_info, cabin_value='')
+
+PROFILE FUNCTIONS:
+def student_profile_api(request, roll_no)
+def faculty_profile_api(request, username)
+def profile_change_requests_api(request)
+def profile_change_request_decision_api(request, request_id)
+def _can_manage_student_profile(user)
+
+AUTHORIZATION HELPER FUNCTIONS:
+def _can_delete_department_announcement(user)
+def _can_manage_department_feedback(user)
+
+================================================================================
+7. AUTHENTICATION & PERMISSIONS
+================================================================================
+
+ALL ENDPOINTS REQUIRE:
+- @api_view (GET, POST, PUT, DELETE as needed)
+- @permission_classes([IsAuthenticated])
+- @authentication_classes([TokenAuthentication])
+
+ROLE-BASED ACCESS:
+- ASSISTANT_PROFESSOR: Can request stock
+- HOD: Can approve/reject stock, delete announcements, resolve feedback
+- DEPTADMIN: Can issue/allocate stock
+- STUDENT: Can submit feedback
+- ALL_AUTHENTICATED: Can view directories, announcements
+
+================================================================================
+8. REQUEST/RESPONSE EXAMPLES
+================================================================================
+
+CREATE ANNOUNCEMENT:
+POST /api/announcements/
+{
+  "programme": "B.Tech",
+  "batch": "2021",
+  "department": "CSE",
+  "message": "Important announcement",
+  "upload_announcement": <file>
+}
+Response: {id: 1, message: "Announcement created successfully."}
+
+REQUEST STOCK:
+POST /api/stock/requests/
+{
+  "brief": "Lab equipment",
+  "request_details": "Need markers for class",
+  "request_receiver": "CSE",
+  "lab": "Computer Lab",
+  "quantity": 10,
+  "stock_item_name": "Marker"
+}
+
+APPROVE STOCK:
+POST /api/stock/requests/<stock_id>/decision/
+{
+  "decision": "APPROVED"
+}
+
+SUBMIT FEEDBACK:
+POST /api/feedback/
+{
+  "subject": "Lab issues",
+  "description": "AC not working",
+  "category": "CSE",
+  "is_confidential": false
+}
+
+================================================================================
+9. ERROR CODES & RESPONSES
+================================================================================
+
+400 BAD REQUEST: Missing required fields, invalid data
+401 UNAUTHORIZED: Not authenticated
+403 FORBIDDEN: Insufficient permissions
+404 NOT FOUND: Resource doesn't exist
+405 METHOD NOT ALLOWED: Directory endpoints are read-only
+500 SERVER ERROR: Internal server error
+
+================================================================================
+10. DATABASE TABLES
+================================================================================
+
+- department_announcements
+- department_stock
+- department_feedback
+- department_timetable
+- department_facility
+- department_specialrequest
+- globals_extrainfo (User info)
+- globals_designation (Roles)
+- globals_holdsdesignation (User roles)
+
+================================================================================
+QUICK COPY-PASTE REFERENCE
+================================================================================
+
+BACKEND BASE PATH:
+/applications/department/api/
+
+FRONTEND BASE PATH:
+/src/Modules/Department/
+
+API PREFIX:
+http://localhost:8000/api/department/api/
+
+MODELS FILE:
+applications/department/models.py
+
+VIEWS FILE:
+applications/department/api/views.py
+
+URLS FILE:
+applications/department/api/urls.py
+
+TESTS:
+applications/department/tests/
+
+================================================================================
+END OF REFERENCE
+================================================================================

@@ -1,0 +1,325 @@
+use_cases:
+
+  - id: "UC-1"
+    title: "View Announcements"
+    description: "User views announcements"
+    actors: "Student/Faculty/Admin"
+    preconditions: "User is logged in"
+
+    happy_paths:
+      - scenario: "User fetches all announcements"
+        preconditions: "User is authenticated"
+        input_action: "GET /ann_data_api/ALL"
+        expected_result: "List of announcements returned"
+
+    alternate_paths:
+      - scenario: "User filters announcements by department"
+        preconditions: "User is authenticated"
+        input_action: "GET /ann_data_api/CSE"
+        expected_result: "Filtered announcements returned"
+
+    exception_paths:
+      - scenario: "No announcements available"
+        preconditions: "User is authenticated"
+        input_action: "GET /ann_data_api/ALL"
+        expected_result: "Empty list returned"
+
+
+  - id: "UC-2"
+    title: "Create Announcement"
+    description: "Authorized user creates announcement"
+    actors: "Faculty/Admin"
+    preconditions: "User is authenticated and authorized"
+
+    happy_paths:
+      - scenario: "Valid announcement creation"
+        preconditions: "User is authenticated"
+        input_action: "POST /announcements_api with valid data"
+        expected_result: "Announcement created successfully"
+
+    alternate_paths:
+      - scenario: "Department normalization (NS)"
+        preconditions: "User is authenticated"
+        input_action: "POST with department=Natural Science"
+        expected_result: "Saved as NS"
+
+    exception_paths:
+      - scenario: "Missing required fields"
+        preconditions: "User is authenticated"
+        input_action: "POST without message"
+        expected_result: "Error response returned"
+
+
+  - id: "UC-3"
+    title: "Delete Announcement"
+    description: "Authorized user deletes announcement"
+    actors: "Admin/HOD"
+    preconditions: "User has delete permission"
+
+    happy_paths:
+      - scenario: "Valid deletion"
+        preconditions: "User authorized"
+        input_action: "DELETE /delete_announcement_api/<id>"
+        expected_result: "Announcement deleted"
+
+    alternate_paths:
+      - scenario: "Delete invalid id"
+        preconditions: "User authorized"
+        input_action: "DELETE invalid id"
+        expected_result: "Not found error"
+
+    exception_paths:
+      - scenario: "Unauthorized delete attempt"
+        preconditions: "User not authorized"
+        input_action: "DELETE request"
+        expected_result: "403 forbidden"
+
+
+  - id: "UC-4"
+    title: "Submit Feedback"
+    description: "User submits feedback"
+    actors: "Student"
+    preconditions: "User is logged in"
+
+    happy_paths:
+      - scenario: "Valid feedback submission"
+        preconditions: "User is authenticated"
+        input_action: "POST /feedback_api with valid data"
+        expected_result: "Feedback created"
+
+    alternate_paths:
+      - scenario: "Auto category assignment"
+        preconditions: "User has department"
+        input_action: "POST without category"
+        expected_result: "Category auto-filled"
+
+    exception_paths:
+      - scenario: "Missing subject or description"
+        preconditions: "User is authenticated"
+        input_action: "POST missing fields"
+        expected_result: "Error returned"
+
+
+  - id: "UC-5"
+    title: "Resolve Feedback"
+    description: "Admin resolves feedback"
+    actors: "Admin/HOD"
+    preconditions: "User is authorized"
+
+    happy_paths:
+      - scenario: "Valid resolution"
+        preconditions: "User authorized"
+        input_action: "POST /resolve_feedback_api/<id>"
+        expected_result: "Feedback resolved"
+
+    alternate_paths:
+      - scenario: "Resolve already resolved feedback"
+        preconditions: "User authorized"
+        input_action: "POST again"
+        expected_result: "State remains resolved"
+
+    exception_paths:
+      - scenario: "Unauthorized resolution"
+        preconditions: "User not authorized"
+        input_action: "POST request"
+        expected_result: "403 forbidden"
+
+
+  - id: "UC-6"
+    title: "Create Stock Request"
+    description: "User creates stock request"
+    actors: "Student/Faculty"
+    preconditions: "User is logged in"
+
+    happy_paths:
+      - scenario: "Valid stock request"
+        preconditions: "User authenticated"
+        input_action: "POST /stock_requests_api"
+        expected_result: "Request created"
+
+    alternate_paths:
+      - scenario: "Default receiver assignment"
+        preconditions: "User authenticated"
+        input_action: "POST without receiver"
+        expected_result: "Department used as receiver"
+
+    exception_paths:
+      - scenario: "Invalid quantity"
+        preconditions: "User authenticated"
+        input_action: "POST quantity=0"
+        expected_result: "Error returned"
+
+
+  - id: "UC-7"
+    title: "Approve or Reject Stock"
+    description: "Admin approves/rejects stock request"
+    actors: "Admin/HOD"
+    preconditions: "User is authorized"
+
+    happy_paths:
+      - scenario: "Approve request"
+        preconditions: "User authorized"
+        input_action: "POST /stock_decision_api decision=APPROVED"
+        expected_result: "Status updated"
+
+    alternate_paths:
+      - scenario: "Reject request"
+        preconditions: "User authorized"
+        input_action: "POST decision=REJECTED"
+        expected_result: "Status updated"
+
+    exception_paths:
+      - scenario: "Invalid decision value"
+        preconditions: "User authorized"
+        input_action: "POST decision=INVALID"
+        expected_result: "Error returned"
+
+
+  - id: "UC-8"
+    title: "Issue Stock"
+    description: "Admin issues stock"
+    actors: "Admin"
+    preconditions: "Stock request approved"
+
+    happy_paths:
+      - scenario: "Valid issue"
+        preconditions: "Request approved"
+        input_action: "POST /stock_issue_api"
+        expected_result: "Stock issued"
+
+    alternate_paths:
+      - scenario: "Allocate instead of issue"
+        preconditions: "Request approved"
+        input_action: "POST action=ALLOCATE"
+        expected_result: "Stock allocated"
+
+    exception_paths:
+      - scenario: "Issue before approval"
+        preconditions: "Request not approved"
+        input_action: "POST request"
+        expected_result: "Error returned"
+
+
+  - id: "UC-9"
+    title: "Manage Timetable"
+    description: "Admin manages timetable"
+    actors: "Admin"
+    preconditions: "User authorized"
+
+    happy_paths:
+      - scenario: "Create timetable entry"
+        preconditions: "User authorized"
+        input_action: "POST /timetable_api"
+        expected_result: "Entry created"
+
+    alternate_paths:
+      - scenario: "Fetch timetable"
+        preconditions: "User authorized"
+        input_action: "GET /timetable_api"
+        expected_result: "List returned"
+
+    exception_paths:
+      - scenario: "Missing required fields"
+        preconditions: "User authorized"
+        input_action: "POST incomplete data"
+        expected_result: "Error returned"
+
+
+  - id: "UC-10"
+    title: "Manage Facilities"
+    description: "User fetches and creates facility entries with quantity tracking"
+    actors: "Staff/Admin"
+    preconditions: "User is authenticated"
+
+    happy_paths:
+      - scenario: "Create facility entry with valid amount"
+        preconditions: "User authenticated"
+        input_action: "POST /facilities_api with name, branch, lab, location and amount=1"
+        expected_result: "Facility row created with amount saved"
+
+    alternate_paths:
+      - scenario: "Fetch facilities filtered by branch"
+        preconditions: "User authenticated"
+        input_action: "GET /facilities_api?branch=CSE"
+        expected_result: "Filtered facilities returned"
+
+    exception_paths:
+      - scenario: "Invalid facility amount"
+        preconditions: "User authenticated"
+        input_action: "POST /facilities_api amount=0"
+        expected_result: "400 returned with amount validation error"
+
+
+  - id: "UC-11"
+    title: "Browse Department Directories"
+    description: "User browses branch-wise student and faculty directory data"
+    actors: "Student/Faculty/Staff"
+    preconditions: "User is authenticated"
+
+    happy_paths:
+      - scenario: "Fetch student directory by branch"
+        preconditions: "User authenticated"
+        input_action: "GET /student_directory_api/CSE"
+        expected_result: "200 returned with directory rows"
+
+    alternate_paths:
+      - scenario: "Fetch faculty directory with branch alias"
+        preconditions: "User authenticated"
+        input_action: "GET /faculty_directory_api/NS"
+        expected_result: "200 returned; NS branch alias normalized"
+
+    exception_paths:
+      - scenario: "Invalid method on directory endpoint"
+        preconditions: "User authenticated"
+        input_action: "POST /student_directory_api/CSE"
+        expected_result: "405 method not allowed"
+
+
+  - id: "UC-12"
+    title: "Submit Profile Change Request"
+    description: "Authenticated user submits and tracks profile change requests"
+    actors: "Student/Faculty/Staff"
+    preconditions: "User is authenticated"
+
+    happy_paths:
+      - scenario: "Submit valid profile change request"
+        preconditions: "User authenticated with valid target_type, target_id and non-empty changes"
+        input_action: "POST /profile_change_requests_api target_type=student, target_id=<roll_no>, changes={...}"
+        expected_result: "201 returned and request id generated"
+
+    alternate_paths:
+      - scenario: "Fetch own profile change requests"
+        preconditions: "User authenticated"
+        input_action: "GET /profile_change_requests_api"
+        expected_result: "200 returned with requester-visible requests"
+
+    exception_paths:
+      - scenario: "Invalid target type in request"
+        preconditions: "User authenticated"
+        input_action: "POST /profile_change_requests_api target_type=invalid"
+        expected_result: "400 returned with target_type validation error"
+
+
+  - id: "UC-13"
+    title: "Send System Notifications"
+    description: "System-generated notifications are sent to relevant users on department events"
+    actors: "System (Primary), Student/Faculty/Dept_Admin/HOD (Secondary)"
+    preconditions: "Triggering event has occurred"
+
+    happy_paths:
+      - scenario: "Send notification on stock request creation"
+        preconditions: "Stock request event triggered"
+        input_action: "System detects event and sends notification to relevant recipients"
+        expected_result: "Real-time notification and/or email sent to target recipients"
+
+    alternate_paths:
+      - scenario: "Send notification on stock approval"
+        preconditions: "Stock approval event triggered"
+        input_action: "System sends notification based on role and context"
+        expected_result: "Notification delivered to appropriate users"
+
+    exception_paths:
+      - scenario: "Notification delivery fails"
+        preconditions: "Event occurred, delivery attempt made"
+        input_action: "System attempts to send notification"
+        expected_result: "Delivery failure logged for retry"
