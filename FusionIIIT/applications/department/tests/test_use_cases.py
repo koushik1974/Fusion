@@ -726,7 +726,7 @@ class TestUC12_ProfileChangeRequests(UCTestBase):
         self.login_as_student()
         response = self.api_post('/profile_change_requests_api', {
             'target_type': 'student',
-            'target_id': self.student_user.username,
+            'target_id': self.student_user.id,
             'changes': {
                 'about_me': 'Updated through UC-12 test'
             }
@@ -768,7 +768,7 @@ class TestUC12_ProfileChangeRequests(UCTestBase):
         self.login_as_student()
         response = self.api_post('/profile_change_requests_api', {
             'target_type': 'invalid',
-            'target_id': self.student_user.username,
+            'target_id': self.student_user.id,
             'changes': {
                 'about_me': 'Invalid target type test'
             }

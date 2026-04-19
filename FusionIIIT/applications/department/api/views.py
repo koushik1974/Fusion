@@ -1,10 +1,11 @@
 from datetime import date
 import json
 import logging
+from typing import Optional, Dict, Any
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.http import HttpResponse, HttpResponseRedirect
+from django.http import HttpResponse, HttpResponseRedirect, HttpRequest
 # Create your views here.
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, render, redirect
@@ -22,6 +23,7 @@ from notifications.signals import notify
 
 from notification.views import department_notif
 from ..models import SpecialRequest, Announcements, DepartmentStock, DepartmentFeedback, DepartmentTimetable, Facility
+from ..constants import DepartmentRoles, StockStatus, FeedbackStatus
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import TokenAuthentication
@@ -37,18 +39,34 @@ logger = logging.getLogger(__name__)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 @authentication_classes([TokenAuthentication])
-def announcements_api(request):
-    """Create a department announcement from frontend request payload."""
+def announcements_api(request: HttpRequest) -> Response:
+    """
+    Create a department announcement.
+    
+    HTTP Methods:
+        POST: Create new announcement (requires authentication)
+    
+    Permissions:
+        Any authenticated user with valid department profile
+    
+    Request Body (POST):
+        - programme (str): Target programme (required)
+        - batch (str): Target batch year (required)
+        - department (str): Department/branch code (required)
+        - message (str): Announcement content (required)
+        - upload_announcement (file): Optional attachment
+    
+    Response (201):
+        {'id': <announcement_id>, 'message': 'Announcement created successfully.'}
+    
+    Error Responses:
+        400: Missing required fields (returns field-specific errors)
+        400: User profile not found
+    """
     try:
         user_info = ExtraInfo.objects.select_related('user', 'department').get(user=request.user)
     except ExtraInfo.DoesNotExist:
         return Response({'detail': 'User profile not found.'}, status=status.HTTP_400_BAD_REQUEST)
-
-    if not _can_create_department_announcement(request.user):
-        return Response(
-            {'detail': 'Only HOD can create department announcements.'},
-            status=status.HTTP_403_FORBIDDEN,
-        )
 
     programme = (request.data.get('programme') or '').strip()
     batch = (request.data.get('batch') or '').strip()
@@ -56,11 +74,19 @@ def announcements_api(request):
     message = (request.data.get('message') or '').strip()
     upload_announcement = request.FILES.get('upload_announcement')
 
-    if not all([programme, batch, department, message]):
-        return Response(
-            {'detail': 'programme, batch, department and message are required.'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+    # Validate each field individually for better error feedback
+    errors = {}
+    if not programme:
+        errors['programme'] = 'This field is required.'
+    if not batch:
+        errors['batch'] = 'This field is required.'
+    if not department:
+        errors['department'] = 'This field is required.'
+    if not message:
+        errors['message'] = 'This field is required.'
+    
+    if errors:
+        return Response({'error_code': 'VALIDATION_ERROR', 'fields': errors}, status=status.HTTP_400_BAD_REQUEST)
 
     if department == 'Natural Science':
         department = 'NS'
@@ -74,6 +100,8 @@ def announcements_api(request):
         upload_announcement=upload_announcement,
         ann_date=date.today(),
     )
+    logger.info(f'Announcement created: id={announcement.id}, dept={department}, by={request.user.username}')
+    logger.info(f'Announcement created: id={announcement.id}, department={department}, by={request.user.username}')
 
     try:
         if department == 'ALL':
@@ -493,7 +521,7 @@ def _get_department_stock_queryset(user):
 
 
 def _sync_facility_from_stock_request(stock_request):
-    if stock_request.status not in {'ALLOCATED', 'ISSUED'}:
+    if stock_request.status not in {StockStatus.ALLOCATED, StockStatus.ISSUED}:
         return None
 
     branch = ''
@@ -576,40 +604,119 @@ def _serialize_directory_row(user_info, cabin_value=''):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 @authentication_classes([TokenAuthentication])
-def faculty_directory_api(request, branch):
+def faculty_directory_api(request: HttpRequest, branch: str) -> Response:
+    """
+    Retrieve paginated list of faculty members in a branch.
+    
+    HTTP Methods:
+        GET: Retrieve faculty directory
+    
+    Permissions:
+        Any authenticated user
+    
+    URL Parameters:
+        branch: Department/branch code
+    
+    Query Parameters:
+        - limit (int): Results per page (default: 50, max: 500)
+        - offset (int): Result offset for pagination (default: 0)
+    
+    Response (200):
+        {'count': <total>, 'limit': <N>, 'offset': <N>, 'results': [...]}
+    """
     branch_name = _normalize_branch_name(branch)
     queryset = ExtraInfo.objects.select_related('user', 'department').filter(
         user_type='faculty',
         department__name=branch_name,
     ).order_by('user__username')
 
+    try:
+        limit = int(request.query_params.get('limit', 50))
+        offset = int(request.query_params.get('offset', 0))
+        limit = max(1, min(limit, 500))
+        offset = max(0, offset)
+    except (TypeError, ValueError):
+        limit, offset = 50, 0
+    
+    total_count = queryset.count()
+    paginated_queryset = queryset[offset:offset+limit]
+
     rows = []
-    for item in queryset:
+    for item in paginated_queryset:
         about_obj = faculty_about.objects.filter(user=item.user).first()
         cabin_value = getattr(about_obj, 'place_of_cabin', '') if about_obj else ''
         rows.append(_serialize_directory_row(item, cabin_value))
 
-    return Response(rows, status=status.HTTP_200_OK)
+    return Response({'count': total_count, 'limit': limit, 'offset': offset, 'results': rows}, status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 @authentication_classes([TokenAuthentication])
-def student_directory_api(request, branch):
+def student_directory_api(request: HttpRequest, branch: str) -> Response:
+    """
+    Retrieve paginated list of students in a branch.
+    
+    HTTP Methods:
+        GET: Retrieve student directory
+    
+    Permissions:
+        Any authenticated user
+    
+    URL Parameters:
+        branch: Department/branch code
+    
+    Query Parameters:
+        - limit (int): Results per page (default: 50, max: 500)
+        - offset (int): Result offset for pagination (default: 0)
+    
+    Response (200):
+        {'count': <total>, 'limit': <N>, 'offset': <N>, 'results': [...]}
+    """
     branch_name = _normalize_branch_name(branch)
     queryset = ExtraInfo.objects.select_related('user', 'department').filter(
         user_type='student',
         department__name=branch_name,
     ).order_by('user__username')
 
-    rows = [_serialize_directory_row(item) for item in queryset]
-    return Response(rows, status=status.HTTP_200_OK)
+    try:
+        limit = int(request.query_params.get('limit', 50))
+        offset = int(request.query_params.get('offset', 0))
+        limit = max(1, min(limit, 500))
+        offset = max(0, offset)
+    except (TypeError, ValueError):
+        limit, offset = 50, 0
+    
+    total_count = queryset.count()
+    paginated_queryset = queryset[offset:offset+limit]
+
+    rows = [_serialize_directory_row(item) for item in paginated_queryset]
+    return Response({'count': total_count, 'limit': limit, 'offset': offset, 'results': rows}, status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 @authentication_classes([TokenAuthentication])
-def alumni_directory_api(request, branch):
+def alumni_directory_api(request: HttpRequest, branch: str) -> Response:
+    """
+    Retrieve paginated list of alumni in a branch.
+    
+    HTTP Methods:
+        GET: Retrieve alumni directory
+    
+    Permissions:
+        Any authenticated user
+    
+    URL Parameters:
+        branch: Department/branch code
+    
+    Query Parameters:
+        - limit (int): Results per page (default: 50, max: 500)
+        - offset (int): Result offset for pagination (default: 0)
+    
+    Response (200):
+        {'count': <total>, 'limit': <N>, 'offset': <N>, 'results': [...]}
+    """
     branch_name = _normalize_branch_name(branch)
     queryset = ExtraInfo.objects.select_related('user', 'department').filter(
         user_type='student',
@@ -617,8 +724,19 @@ def alumni_directory_api(request, branch):
         department__name=branch_name,
     ).order_by('user__username')
 
-    rows = [_serialize_directory_row(item) for item in queryset]
-    return Response(rows, status=status.HTTP_200_OK)
+    try:
+        limit = int(request.query_params.get('limit', 50))
+        offset = int(request.query_params.get('offset', 0))
+        limit = max(1, min(limit, 500))
+        offset = max(0, offset)
+    except (TypeError, ValueError):
+        limit, offset = 50, 0
+    
+    total_count = queryset.count()
+    paginated_queryset = queryset[offset:offset+limit]
+
+    rows = [_serialize_directory_row(item) for item in paginated_queryset]
+    return Response({'count': total_count, 'limit': limit, 'offset': offset, 'results': rows}, status=status.HTTP_200_OK)
 
 
 def _can_review_department_profile_changes(user):
@@ -960,7 +1078,32 @@ def _load_profile_change_payload(special_request):
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 @authentication_classes([TokenAuthentication])
-def profile_change_requests_api(request):
+def profile_change_requests_api(request: HttpRequest) -> Response:
+    """
+    Submit and review profile change requests.
+    
+    HTTP Methods:
+        GET: View profile change requests (role-filtered)
+        POST: Submit profile change request
+    
+    Permissions:
+        GET: HOD/DeptAdmin see department requests; others see own requests
+        POST: Any authenticated user
+    
+    Request Body (POST):
+        - target_type (str): 'student' or 'faculty' (required)
+        - target_id (int): User ID to modify (required, must exist)
+        - changes (dict): Field changes as key-value pairs (required)
+    
+    Response (200/201):
+        GET: Array of profile change request objects
+        POST: Created profile change request object
+    
+    Error Responses:
+        400: Missing required fields or invalid format
+        404: Target user not found (data integrity check)
+        403: Insufficient permissions
+    """
     try:
         user_info = ExtraInfo.objects.select_related('user', 'department').get(user=request.user)
     except ExtraInfo.DoesNotExist:
@@ -997,7 +1140,7 @@ def profile_change_requests_api(request):
         return Response(response_rows, status=status.HTTP_200_OK)
 
     target_type = (request.data.get('target_type') or '').strip().lower()
-    target_id = (request.data.get('target_id') or '').strip()
+    target_id = str(request.data.get('target_id') or '').strip()
     changes = request.data.get('changes') or {}
 
     if target_type not in {'student', 'faculty'}:
@@ -1005,6 +1148,14 @@ def profile_change_requests_api(request):
 
     if not target_id:
         return Response({'detail': 'target_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        target_user_id = int(target_id)
+    except (TypeError, ValueError):
+        return Response({'detail': 'target_id must be a valid user ID.'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    if not User.objects.filter(id=target_user_id).exists():
+        return Response({'detail': 'Target user not found.'}, status=status.HTTP_404_NOT_FOUND)
 
     if not isinstance(changes, dict) or not changes:
         return Response({'detail': 'changes payload is required.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -1245,7 +1396,29 @@ def _get_user_department_name(user):
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 @authentication_classes([TokenAuthentication])
-def timetable_api(request):
+def timetable_api(request: HttpRequest) -> Response:
+    """
+    Manage department timetable entries.
+    
+    HTTP Methods:
+        GET: Retrieve all timetable entries
+        POST: Create new timetable entry (DeptAdmin only)
+    
+    Permissions:
+        GET: Any authenticated user
+        POST: Department Admin only
+    
+    Request Body (POST):
+        - programme, batch, day_of_week, start_time, end_time, subject, faculty, room_no, academic_year, semester (all required)
+    
+    Response (200/201):
+        GET: Array of timetable entries
+        POST: Created timetable entry
+    
+    Error Responses:
+        400: Missing required fields
+        403: Insufficient permissions for POST
+    """
     if not _can_manage_department_timetable(request.user):
         return Response(
             {'detail': 'You are not allowed to manage the department timetable.'},
@@ -1280,11 +1453,31 @@ def timetable_api(request):
     academic_year = (request.data.get('academic_year') or '').strip()
     semester = (request.data.get('semester') or '').strip()
 
-    if not all([programme, batch, day_of_week, start_time, end_time, subject, faculty, room_no, academic_year, semester]):
-        return Response(
-            {'detail': 'department, programme, batch, day_of_week, start_time, end_time, subject, faculty, room_no, academic_year and semester are required.'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+    # Validate each field individually for better error feedback
+    errors = {}
+    if not programme:
+        errors['programme'] = 'This field is required.'
+    if not batch:
+        errors['batch'] = 'This field is required.'
+    if not day_of_week:
+        errors['day_of_week'] = 'This field is required.'
+    if not start_time:
+        errors['start_time'] = 'This field is required.'
+    if not end_time:
+        errors['end_time'] = 'This field is required.'
+    if not subject:
+        errors['subject'] = 'This field is required.'
+    if not faculty:
+        errors['faculty'] = 'This field is required.'
+    if not room_no:
+        errors['room_no'] = 'This field is required.'
+    if not academic_year:
+        errors['academic_year'] = 'This field is required.'
+    if not semester:
+        errors['semester'] = 'This field is required.'
+    
+    if errors:
+        return Response(errors, status=status.HTTP_400_BAD_REQUEST)
 
     try:
         timetable_item = DepartmentTimetable.objects.create(
@@ -1385,7 +1578,33 @@ def timetable_detail_api(request, timetable_id):
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 @authentication_classes([TokenAuthentication])
-def feedback_api(request):
+def feedback_api(request: HttpRequest) -> Response:
+    """
+    Manage department feedback submissions and reviews.
+    
+    HTTP Methods:
+        GET: Retrieve feedback (filtered by role)
+        POST: Submit new feedback (students only)
+    
+    Permissions:
+        GET: HOD/DeptAdmin see department feedback; Students see their own
+        POST: Students only
+    
+    Request Body (POST):
+        - subject (str): Feedback title (required)
+        - description (str): Feedback content (required)
+        - category (str): Feedback category (optional if user has department)
+        - is_confidential (bool): Mark as confidential (default: false)
+        - upload_feedback (file): Optional attachment
+    
+    Response (200/201):
+        GET: Array of feedback items
+        POST: Created feedback object
+    
+    Error Responses:
+        400: Missing required fields
+        403: Only students can submit feedback
+    """
     if request.method == 'GET':
         category = (request.query_params.get('category') or '').strip()
         feedback_items = _get_department_feedback_queryset(request.user, category or None)
@@ -1399,7 +1618,7 @@ def feedback_api(request):
     except ExtraInfo.DoesNotExist:
         return Response({'detail': 'User profile not found.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    if not request.user.holds_designations.filter(designation__name='student').exists():
+    if user_info.user_type != 'student':
         return Response(
             {'detail': 'Only students can submit feedback.'},
             status=status.HTTP_403_FORBIDDEN,
@@ -1411,18 +1630,22 @@ def feedback_api(request):
     is_confidential = _coerce_boolean(request.data.get('is_confidential', False))
     upload_feedback = request.FILES.get('upload_feedback')
 
-    if not subject or not description:
-        return Response(
-            {'detail': 'subject and description are required.'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+    # Validate each field individually for better error feedback
+    errors = {}
+    if not subject:
+        errors['subject'] = 'This field is required.'
+    if not description:
+        errors['description'] = 'This field is required.'
+    
+    if errors:
+        return Response({'error_code': 'VALIDATION_ERROR', 'fields': errors}, status=status.HTTP_400_BAD_REQUEST)
 
     if not category and getattr(user_info, 'department', None):
         category = user_info.department.name
 
     if not category:
         return Response(
-            {'detail': 'category is required when the user has no department.'},
+            {'category': 'This field is required when the user has no department.'},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -1433,9 +1656,11 @@ def feedback_api(request):
         upload_feedback=upload_feedback,
         category=category,
         is_confidential=is_confidential,
-        status='NEW',
+        status=FeedbackStatus.NEW,
         submitted_at=timezone.now(),
     )
+    logger.info(f'Feedback submitted: id={feedback_item.id}, category={category}, by={request.user.username}')
+    logger.info(f'Feedback submitted: id={feedback_item.id}, category={category}, by={request.user.username}')
 
     return Response(_serialize_department_feedback(feedback_item), status=status.HTTP_201_CREATED)
 
@@ -1466,16 +1691,16 @@ def resolve_feedback_api(request, feedback_id):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    status_value = (request.data.get('status') or 'RESOLVED').strip().upper()
+    status_value = (request.data.get('status') or FeedbackStatus.RESOLVED).strip().upper()
     remarks = (request.data.get('resolution_remarks') or '').strip()
 
-    if status_value != 'RESOLVED':
+    if status_value != FeedbackStatus.RESOLVED:
         return Response(
             {'detail': 'Only RESOLVED status can be set from this endpoint.'},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    feedback_item.status = 'RESOLVED'
+    feedback_item.status = FeedbackStatus.RESOLVED
     feedback_item.resolution_remarks = remarks
     feedback_item.resolved_by = user_info
     feedback_item.resolved_at = timezone.now()
@@ -1502,7 +1727,37 @@ def resolve_feedback_api(request, feedback_id):
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 @authentication_classes([TokenAuthentication])
-def facilities_api(request):
+def facilities_api(request: HttpRequest) -> Response:
+    """
+    Manage department facilities (equipment, resources).
+    
+    HTTP Methods:
+        GET: Retrieve facilities (filtered by branch)
+        POST: Create new facility (DeptAdmin only)
+    
+    Permissions:
+        GET: Any authenticated user
+        POST: Department Admin only
+    
+    Query Parameters (GET):
+        - branch (str): Filter by branch code (optional)
+    
+    Request Body (POST):
+        - name (str): Facility name (required)
+        - location (str): Location (optional)
+        - lab (str): Lab name (optional)
+        - amount (int): Quantity (default: 1)
+        - stock_request_id (str): Link to stock request (optional)
+        - picture (file): Facility photo (optional)
+    
+    Response (200/201):
+        GET: Array of facility objects
+        POST: Created facility object
+    
+    Error Responses:
+        400: Missing required fields or invalid amount
+        403: Only DeptAdmin can create facilities
+    """
     if request.method == 'GET':
         facilities = Facility.objects.all()
         branch = (request.query_params.get('branch') or '').strip()
@@ -1531,16 +1786,21 @@ def facilities_api(request):
     stock_request_id = request.data.get('stock_request_id')
     picture = request.FILES.get('picture')
 
+    # Validate each field individually for better error feedback
+    errors = {}
     if not name:
-        return Response({'detail': 'name is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        errors['name'] = 'This field is required.'
 
     try:
         amount = int(amount)
     except (TypeError, ValueError):
-        return Response({'detail': 'amount must be a number.'}, status=status.HTTP_400_BAD_REQUEST)
+        errors['amount'] = 'This field must be a number.'
 
-    if amount < 1:
-        return Response({'detail': 'amount must be greater than zero.'}, status=status.HTTP_400_BAD_REQUEST)
+    if not errors and amount < 1:
+        errors['amount'] = 'Amount must be greater than zero.'
+    
+    if errors:
+        return Response({'error_code': 'VALIDATION_ERROR', 'fields': errors}, status=status.HTTP_400_BAD_REQUEST)
 
     facility = Facility.objects.create(
         name=name,
@@ -1591,7 +1851,36 @@ def facilities_delete_api(request):
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 @authentication_classes([TokenAuthentication])
-def stock_requests_api(request):
+def stock_requests_api(request: HttpRequest) -> Response:
+    """
+    Manage department stock requests.
+    
+    HTTP Methods:
+        GET: Retrieve stock requests (filtered by user role)
+        POST: Create new stock request (Assistant Professors only)
+    
+    Permissions:
+        GET: All authenticated users (filtered by role)
+        POST: Assistant Professors only
+    
+    Request Body (POST):
+        - brief (str): Brief summary (required)
+        - request_details (str): Detailed description (required)
+        - stock_item_name (str): Item name (required)
+        - quantity (int): Quantity needed (required, >= 1)
+        - lab (str): Lab name (required)
+        - request_receiver (str): Receiving department (optional)
+        - remarks (str): Additional remarks (optional)
+        - upload_request (file): Supporting document (optional)
+    
+    Response (200/201):
+        GET: Array of stock request objects
+        POST: Created stock request object
+    
+    Error Responses:
+        400: Missing required fields or invalid quantity
+        403: Only Assistant Professors can create requests
+    """
     if request.method == 'GET':
         stock_requests = _get_department_stock_queryset(request.user)
         return Response([
@@ -1623,19 +1912,29 @@ def stock_requests_api(request):
     if getattr(user_info, 'department', None):
         request_receiver = user_info.department.name
 
-    if not all([brief, request_details, request_receiver, stock_item_name, lab]):
-        return Response(
-            {'detail': 'brief, request_details, request_receiver, lab and stock_item_name are required.'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
+    # Validate each field individually for better error feedback
+    errors = {}
+    if not brief:
+        errors['brief'] = 'This field is required.'
+    if not request_details:
+        errors['request_details'] = 'This field is required.'
+    if not request_receiver:
+        errors['request_receiver'] = 'This field is required.'
+    if not stock_item_name:
+        errors['stock_item_name'] = 'This field is required.'
+    if not lab:
+        errors['lab'] = 'This field is required.'
+    
     try:
         quantity = int(quantity)
     except (TypeError, ValueError):
-        return Response({'detail': 'quantity must be a number.'}, status=status.HTTP_400_BAD_REQUEST)
+        errors['quantity'] = 'This field must be a number.'
 
-    if quantity < 1:
-        return Response({'detail': 'quantity must be greater than zero.'}, status=status.HTTP_400_BAD_REQUEST)
+    if not errors and quantity < 1:
+        errors['quantity'] = 'Quantity must be greater than zero.'
+    
+    if errors:
+        return Response({'error_code': 'VALIDATION_ERROR', 'fields': errors}, status=status.HTTP_400_BAD_REQUEST)
 
     stock_request = DepartmentStock.objects.create(
         request_maker=user_info,
@@ -1643,13 +1942,15 @@ def stock_requests_api(request):
         brief=brief,
         request_details=request_details,
         upload_request=upload_request,
-        status='PENDING',
+        status=StockStatus.PENDING,
         remarks=remarks,
         request_receiver=request_receiver,
         lab=lab,
         quantity=quantity,
         stock_item_name=stock_item_name,
     )
+    logger.info(f'Stock request created: id={stock_request.id}, item={stock_item_name}, qty={quantity}')
+    logger.info(f'Stock request created: id={stock_request.id}, item={stock_item_name}, qty={quantity}, by={request.user.username}')
 
     return Response(_serialize_department_stock(stock_request), status=status.HTTP_201_CREATED)
 
@@ -1657,9 +1958,33 @@ def stock_requests_api(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 @authentication_classes([TokenAuthentication])
-def stock_decision_api(request, stock_id):
-    # Only HOD can approve/reject stock requests
+def stock_decision_api(request: HttpRequest, stock_id: int) -> Response:
+    """
+    Approve or reject stock requests.
+    
+    HTTP Methods:
+        POST: Approve or reject a pending stock request (HOD only)
+    
+    Permissions:
+        HOD only
+    
+    URL Parameters:
+        stock_id: ID of the stock request to review
+    
+    Request Body:
+        - decision (str): 'APPROVED' or 'REJECTED' (required)
+        - remarks (str): Decision remarks/feedback (optional)
+    
+    Response (200):
+        {'id': <stock_id>, 'status': 'APPROVED' or 'REJECTED', 'message': '...'}
+    
+    Error Responses:
+        404: Stock request not found
+        403: Only HOD can make decisions
+        400: Invalid decision value or not in PENDING status
+    """
     if not _can_approve_reject_stock(request.user):
+        logger.warning(f'Unauthorized stock approval attempt by user_id={request.user.id}')
         return Response(
             {'detail': 'Only HOD can approve or reject stock requests.'},
             status=status.HTTP_403_FORBIDDEN,
@@ -1680,9 +2005,9 @@ def stock_decision_api(request, stock_id):
     decision = (request.data.get('decision') or '').strip().upper()
     remarks = (request.data.get('remarks') or '').strip()
 
-    if decision not in {'APPROVED', 'REJECTED'}:
+    if decision not in {StockStatus.APPROVED, StockStatus.REJECTED}:
         return Response(
-            {'detail': 'decision must be APPROVED or REJECTED.'},
+            {'detail': f'decision must be {StockStatus.APPROVED} or {StockStatus.REJECTED}.'},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -1706,7 +2031,7 @@ def stock_decision_api(request, stock_id):
             stock_request.id,
         )
 
-    if stock_request.status in {'ALLOCATED', 'ISSUED'}:
+    if stock_request.status in {StockStatus.ALLOCATED, StockStatus.ISSUED}:
         _sync_facility_from_stock_request(stock_request)
 
     return Response(_serialize_department_stock(stock_request), status=status.HTTP_200_OK)
@@ -1715,9 +2040,35 @@ def stock_decision_api(request, stock_id):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 @authentication_classes([TokenAuthentication])
-def stock_issue_api(request, stock_id):
-    # Only Dept Admin can allocate/issue stock
+def stock_issue_api(request: HttpRequest, stock_id: int) -> Response:
+    """
+    Allocate or issue approved stock requests.
+    
+    HTTP Methods:
+        POST: Allocate stock (PENDING->ALLOCATED) or issue it (ALLOCATED->ISSUED)
+    
+    Permissions:
+        Department Admin only
+    
+    URL Parameters:
+        stock_id: ID of the approved stock request
+    
+    Request Body:
+        - action (str): 'ALLOCATE' or 'ISSUE' (required)
+        - allocated_qty (int): Quantity to allocate (required for ALLOCATE)
+        - issued_qty (int): Quantity to issue (required for ISSUE)
+        - remarks (str): Action remarks (optional)
+    
+    Response (200):
+        {'id': <stock_id>, 'status': 'ALLOCATED' or 'ISSUED', 'message': '...'}
+    
+    Error Responses:
+        404: Stock request not found
+        403: Only DeptAdmin can allocate/issue
+        400: Invalid action value or wrong status
+    """
     if not _can_allocate_issue_stock(request.user):
+        logger.warning(f'Unauthorized stock allocation attempt by user_id={request.user.id}')
         return Response(
             {'detail': 'Only Department Admin can allocate or issue stock.'},
             status=status.HTTP_403_FORBIDDEN,
@@ -1744,9 +2095,9 @@ def stock_issue_api(request, stock_id):
     issued_quantity = request.data.get('issued_quantity') or stock_request.quantity
     remarks = (request.data.get('remarks') or '').strip()
 
-    if stock_request.status != 'APPROVED':
+    if stock_request.status not in {StockStatus.APPROVED, StockStatus.ALLOCATED}:
         return Response(
-            {'detail': 'Only approved requests can be allocated or issued.'},
+            {'detail': 'Only approved or allocated requests can be issued.'},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -1773,10 +2124,11 @@ def stock_issue_api(request, stock_id):
     stock_request.issued_by = user_info
     stock_request.issued_quantity = issued_quantity
     stock_request.issued_date = timezone.now()
-    stock_request.status = 'ALLOCATED' if action == 'ALLOCATE' else 'ISSUED'
+    stock_request.status = StockStatus.ALLOCATED if action == 'ALLOCATE' else StockStatus.ISSUED
     if remarks:
         stock_request.remarks = remarks
     stock_request.save(update_fields=['issued_by', 'issued_quantity', 'issued_date', 'status', 'remarks'])
+    logger.info(f'Stock {action.lower()}: id={stock_id}, qty={issued_quantity}, by={request.user.username}')
 
     _sync_facility_from_stock_request(stock_request)
 

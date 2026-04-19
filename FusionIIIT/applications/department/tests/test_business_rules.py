@@ -503,7 +503,7 @@ class TestBR12_ProfileChangePayloadValidation(BRTestBase):
         self.login_as_student()
         response = self.api_post('/profile_change_requests_api', {
             'target_type': 'student',
-            'target_id': self.student_user.username,
+            'target_id': self.student_user.id,
             'changes': {'about_me': 'BR-12 valid test'}
         }, expected_status=None)
 
@@ -523,7 +523,7 @@ class TestBR12_ProfileChangePayloadValidation(BRTestBase):
         self.login_as_student()
         response = self.api_post('/profile_change_requests_api', {
             'target_type': 'invalid',
-            'target_id': self.student_user.username,
+            'target_id': self.student_user.id,
             'changes': {'about_me': 'BR-12 invalid test'}
         }, expected_status=None)
 
