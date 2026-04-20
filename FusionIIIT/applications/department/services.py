@@ -272,6 +272,59 @@ class FeedbackService:
         return feedback
 
 
+class FacilityService:
+    """Service for managing department facilities."""
+
+    @staticmethod
+    def create_facility(
+        name: str,
+        branch: str,
+        location: str = '',
+        lab: str = '',
+        amount: int = 1,
+        picture=None,
+        stock_request_id: Optional[int] = None,
+    ) -> Facility:
+        """Create a new facility.
+        
+        Args:
+            name: Facility name
+            branch: Branch/department
+            location: Facility location
+            lab: Lab designation
+            amount: Quantity
+            picture: Photo attachment
+            stock_request_id: Link to stock request
+            
+        Returns:
+            Created Facility instance
+        """
+        facility = Facility.objects.create(
+            name=name,
+            branch=branch,
+            location=location,
+            lab=lab,
+            amount=amount,
+            picture=picture,
+            stock_request_id=stock_request_id,
+        )
+        return facility
+
+    @staticmethod
+    @transaction.atomic
+    def bulk_delete_facilities(facility_ids: list) -> int:
+        """Delete multiple facilities atomically.
+        
+        Args:
+            facility_ids: List of facility IDs to delete
+            
+        Returns:
+            Number of facilities deleted
+        """
+        deleted_count, _ = Facility.objects.filter(id__in=facility_ids).delete()
+        return deleted_count
+
+
 class SpecialRequestService:
     """Service for managing special requests."""
 

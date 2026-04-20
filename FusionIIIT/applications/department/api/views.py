@@ -8,6 +8,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, HttpResponseRedirect, HttpRequest
 # Create your views here.
 from django.db.models import Q
+from django.db import transaction
 from django.shortcuts import get_object_or_404, render, redirect
 from django.contrib.auth.models import User
 from django.core.files.base import ContentFile
@@ -98,7 +99,7 @@ def announcements_api(request: HttpRequest) -> Response:
         department=department,
         message=message,
         upload_announcement=upload_announcement,
-        ann_date=date.today(),
+        ann_date=timezone.now(),
     )
     logger.info(f'Announcement created: id={announcement.id}, dept={department}, by={request.user.username}')
     logger.info(f'Announcement created: id={announcement.id}, department={department}, by={request.user.username}')
@@ -1196,6 +1197,7 @@ def profile_change_requests_api(request: HttpRequest) -> Response:
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 @authentication_classes([TokenAuthentication])
+@transaction.atomic
 def profile_change_request_decision_api(request, request_id):
     if not _can_review_department_profile_changes(request.user):
         return Response(
@@ -1608,10 +1610,25 @@ def feedback_api(request: HttpRequest) -> Response:
     if request.method == 'GET':
         category = (request.query_params.get('category') or '').strip()
         feedback_items = _get_department_feedback_queryset(request.user, category or None)
-        return Response([
-            _serialize_department_feedback(item)
-            for item in feedback_items
-        ], status=status.HTTP_200_OK)
+        
+        # Add pagination support
+        try:
+            limit = int(request.query_params.get('limit', 50))
+            offset = int(request.query_params.get('offset', 0))
+            limit = max(1, min(limit, 500))
+            offset = max(0, offset)
+        except (TypeError, ValueError):
+            limit, offset = 50, 0
+        
+        total_count = feedback_items.count()
+        paginated_items = feedback_items[offset:offset+limit]
+        
+        return Response({
+            'count': total_count,
+            'limit': limit,
+            'offset': offset,
+            'results': [_serialize_department_feedback(item) for item in paginated_items]
+        }, status=status.HTTP_200_OK)
 
     try:
         user_info = ExtraInfo.objects.select_related('user', 'department').get(user=request.user)
@@ -1668,6 +1685,7 @@ def feedback_api(request: HttpRequest) -> Response:
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 @authentication_classes([TokenAuthentication])
+@transaction.atomic
 def resolve_feedback_api(request, feedback_id):
     if not _can_manage_department_feedback(request.user):
         return Response(
@@ -1818,6 +1836,7 @@ def facilities_api(request: HttpRequest) -> Response:
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
 @authentication_classes([TokenAuthentication])
+@transaction.atomic
 def facilities_delete_api(request):
     if not _can_manage_department_facilities(request.user):
         return Response(
@@ -1883,10 +1902,25 @@ def stock_requests_api(request: HttpRequest) -> Response:
     """
     if request.method == 'GET':
         stock_requests = _get_department_stock_queryset(request.user)
-        return Response([
-            _serialize_department_stock(item)
-            for item in stock_requests
-        ], status=status.HTTP_200_OK)
+        
+        # Add pagination support
+        try:
+            limit = int(request.query_params.get('limit', 50))
+            offset = int(request.query_params.get('offset', 0))
+            limit = max(1, min(limit, 500))
+            offset = max(0, offset)
+        except (TypeError, ValueError):
+            limit, offset = 50, 0
+        
+        total_count = stock_requests.count()
+        paginated_requests = stock_requests[offset:offset+limit]
+        
+        return Response({
+            'count': total_count,
+            'limit': limit,
+            'offset': offset,
+            'results': [_serialize_department_stock(item) for item in paginated_requests]
+        }, status=status.HTTP_200_OK)
 
     # POST: Only Assistant Professors can create stock requests
     if not _can_request_stock(request.user):
@@ -1958,6 +1992,7 @@ def stock_requests_api(request: HttpRequest) -> Response:
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 @authentication_classes([TokenAuthentication])
+@transaction.atomic
 def stock_decision_api(request: HttpRequest, stock_id: int) -> Response:
     """
     Approve or reject stock requests.
@@ -2040,6 +2075,7 @@ def stock_decision_api(request: HttpRequest, stock_id: int) -> Response:
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 @authentication_classes([TokenAuthentication])
+@transaction.atomic
 def stock_issue_api(request: HttpRequest, stock_id: int) -> Response:
     """
     Allocate or issue approved stock requests.
