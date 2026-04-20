@@ -576,6 +576,13 @@ def _can_resolve_feedback(user):
             or "hod" in name
         ):
             return True
+    
+    # Fallback: Check if user has dept_admin role set
+    if hasattr(user, "profile_info") and user.profile_info:
+        user_role = getattr(user.profile_info, "role", "").lower().strip()
+        if "deptadmin" in user_role or "dept_admin" in user_role or "hod" in user_role:
+            return True
+    
     return False
 
 
@@ -765,6 +772,7 @@ def _can_review_department_profile_changes(user):
 
 def _serialize_student_profile(user_info, student_obj=None):
     return {
+        'id': user_info.user.id,
         'roll_no': user_info.user.username,
         'name': '{} {}'.format(user_info.user.first_name or '', user_info.user.last_name or '').strip(),
         'department': user_info.department.name if user_info.department else None,
@@ -781,6 +789,7 @@ def _serialize_faculty_profile(user_info):
     about_obj = faculty_about.objects.filter(user=user_info.user).first()
     full_name = '{} {}'.format(user_info.user.first_name or '', user_info.user.last_name or '').strip()
     return {
+        'id': user_info.user.id,
         'username': user_info.user.username,
         'name': full_name or user_info.user.username,
         'department': user_info.department.name if user_info.department else None,
@@ -800,9 +809,15 @@ def _serialize_faculty_profile(user_info):
 def _apply_profile_payload(target_type, target_id, payload):
     payload = payload or {}
     target_type = (target_type or '').strip().lower()
+    
+    # Convert target_id to integer for user lookup
+    try:
+        target_user_id = int(target_id)
+    except (TypeError, ValueError):
+        return False, 'target_id must be a valid user ID.'
 
     if target_type == 'student':
-        target_user = get_object_or_404(User, username=target_id)
+        target_user = get_object_or_404(User, id=target_user_id)
         target_info = get_object_or_404(ExtraInfo.objects.select_related('user', 'department'), user=target_user)
 
         if str(target_info.user_type).strip().lower() != 'student':
@@ -854,7 +869,7 @@ def _apply_profile_payload(target_type, target_id, payload):
         return True, _serialize_student_profile(target_info, Student.objects.filter(id=target_info).first())
 
     if target_type == 'faculty':
-        target_user = get_object_or_404(User, username=target_id)
+        target_user = get_object_or_404(User, id=target_user_id)
         target_info = get_object_or_404(ExtraInfo.objects.select_related('user', 'department'), user=target_user)
 
         if str(target_info.user_type).strip().lower() != 'faculty':
@@ -1687,7 +1702,12 @@ def feedback_api(request: HttpRequest) -> Response:
 @authentication_classes([TokenAuthentication])
 @transaction.atomic
 def resolve_feedback_api(request, feedback_id):
-    if not _can_manage_department_feedback(request.user):
+    # ✅ Permission Check Logging
+    can_resolve = _can_manage_department_feedback(request.user)
+    print(f"[SECURITY] User {request.user.username} (ID: {request.user.id}) attempting to resolve feedback {feedback_id}. Permission: {can_resolve}")
+    
+    if not can_resolve:
+        print(f"[SECURITY] Access denied for {request.user.username} - insufficient permissions")
         return Response(
             {'detail': 'You are not allowed to resolve feedback.'},
             status=status.HTTP_403_FORBIDDEN,
@@ -1724,6 +1744,20 @@ def resolve_feedback_api(request, feedback_id):
     feedback_item.resolved_at = timezone.now()
     feedback_item.save(update_fields=['status', 'resolution_remarks', 'resolved_by', 'resolved_at'])
 
+    # ✅ Audit Logging - Track who resolved what feedback and when
+    audit_log = {
+        'action': 'FEEDBACK_RESOLVED',
+        'resolver_username': request.user.username,
+        'resolver_id': request.user.id,
+        'feedback_id': feedback_item.id,
+        'feedback_subject': feedback_item.subject,
+        'feedback_category': feedback_item.category,
+        'resolved_at': feedback_item.resolved_at.isoformat() if feedback_item.resolved_at else None,
+        'remarks_length': len(remarks),
+        'timestamp': timezone.now().isoformat(),
+    }
+    print(f"[AUDIT] Feedback resolved: {audit_log}")
+    
     try:
         notify.send(
             sender=request.user,
